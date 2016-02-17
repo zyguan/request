@@ -2,5 +2,5 @@
 
 ```go
 urls := []string{"https://github.com/zyguan/request"}
-for d := range request.Do(GetRequests(urls), 2) { ...
+for d := range request.Do(request.GetRequests(urls), 2) { ...
 ```

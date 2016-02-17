@@ -18,6 +18,9 @@ func DoWithFilter(reqs <-chan Request, n int,
 	filter ResponseFilter) <-chan HttpData {
 
 	out, n := make(chan HttpData), nGoroutines(n)
+	if n == 1 {
+		return Do1WithFilter(reqs, filter)
+	}
 	go func() {
 		var wg sync.WaitGroup
 		chans := make([]chan Request, n)
