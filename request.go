@@ -2,11 +2,9 @@ package request
 
 import (
 	"compress/gzip"
-	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"reflect"
 	"sync"
 )
 
@@ -18,53 +16,14 @@ func DoWithFilter(reqs <-chan Request, n int,
 	filter ResponseFilter) <-chan HttpData {
 
 	out, n := make(chan HttpData), nGoroutines(n)
-	if n == 1 {
-		return Do1WithFilter(reqs, filter)
-	}
+
 	go func() {
 		var wg sync.WaitGroup
-		chans := make([]chan Request, n)
-		cases := make([]reflect.SelectCase, n)
-
-		// init and start workers
+		wg.Add(n)
 		for i := 0; i < n; i++ {
-			chans[i] = make(chan Request)
-			cases[i] = reflect.SelectCase{
-				Dir:  reflect.SelectSend,
-				Chan: reflect.ValueOf(chans[i]),
-			}
-			go fetchData(chans[i], out, &wg, filter)
-		}
-
-		// dispatch reqs to workers
-		for req := range reqs {
-			for i := range cases {
-				cases[i].Send = reflect.ValueOf(req)
-			}
-			reflect.Select(cases)
-		}
-
-		// close channels
-		for i := range chans {
-			close(chans[i])
+			go fetchData(reqs, out, &wg, filter)
 		}
 		wg.Wait()
-		close(out)
-	}()
-	return out
-}
-
-// Optimized version of Do(reqs, 1)
-func Do1(reqs <-chan Request) <-chan HttpData {
-	return Do1WithFilter(reqs, PassFilter())
-}
-
-func Do1WithFilter(reqs <-chan Request,
-	filter ResponseFilter) <-chan HttpData {
-
-	out := make(chan HttpData)
-	go func() {
-		fetchData(reqs, out, nil, filter)
 		close(out)
 	}()
 	return out
@@ -79,14 +38,10 @@ func nGoroutines(n int) int {
 
 func fetchData(reqs <-chan Request, out chan<- HttpData,
 	wg *sync.WaitGroup, filter ResponseFilter) {
-
-	if wg != nil {
-		wg.Add(1)
-		defer wg.Done()
-	}
 	for req := range reqs {
 		out <- RequestHttpData(req, filter)
 	}
+	wg.Done()
 }
 
 func RequestHttpData(req Request, filter ResponseFilter) HttpData {
@@ -96,8 +51,7 @@ func RequestHttpData(req Request, filter ResponseFilter) HttpData {
 	}
 	defer res.Body.Close()
 
-	if !filter(res) {
-		err = errors.New("Response doesn't match filter criteria")
+	if err := filter(res); err != nil {
 		return HttpData{req, res, []byte{}, err}
 	}
 

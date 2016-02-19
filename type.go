@@ -1,6 +1,10 @@
 package request
 
-import "net/http"
+import (
+	"errors"
+	"fmt"
+	"net/http"
+)
 
 type Request *http.Request
 
@@ -33,24 +37,25 @@ type HttpData struct {
 	Err error
 }
 
-type ResponseFilter func(*http.Response) bool
+type ResponseFilter func(*http.Response) error
 
 func PassFilter() ResponseFilter {
-	return func(res *http.Response) bool {
-		return true
+	return func(res *http.Response) error {
+		return nil
 	}
 }
 
 func StatusFilter(codes []int) ResponseFilter {
-	return func(res *http.Response) bool {
+	return func(res *http.Response) error {
 		if res == nil {
-			return false
+			return errors.New("Response is nil")
 		}
 		for _, code := range codes {
 			if code == res.StatusCode {
-				return true
+				return nil
 			}
 		}
-		return false
+		return fmt.Errorf("Expecting status code "+
+			"in %v, found %d", codes, res.StatusCode)
 	}
 }

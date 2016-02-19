@@ -36,8 +36,8 @@ func TestDo(t *testing.T) {
 	recv(Do(GetRequests(urls), runtime.NumCPU()))
 }
 
-func TestDo1WithFilter(t *testing.T) {
-	recv(Do1WithFilter(GetRequests(urls), StatusFilter([]int{200})))
+func TestDoWithFilter(t *testing.T) {
+	recv(DoWithFilter(GetRequests(urls), 1, StatusFilter([]int{200})))
 }
 
 func recv(data <-chan HttpData) {
