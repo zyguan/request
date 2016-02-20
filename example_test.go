@@ -33,11 +33,11 @@ func padding(strs []string) func(string) string {
 }
 
 func TestDo(t *testing.T) {
-	recv(Do(GetRequests(urls), runtime.NumCPU()))
+	recv(Do(runtime.NumCPU(), GetRequests(urls)))
 }
 
 func TestDoWithFilter(t *testing.T) {
-	recv(DoWithFilter(GetRequests(urls), 1, StatusFilter([]int{200})))
+	recv(DoWithFilter(1, GetRequests(urls), StatusFilter([]int{200})))
 }
 
 func recv(data <-chan HttpData) {

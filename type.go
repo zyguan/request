@@ -6,28 +6,29 @@ import (
 	"net/http"
 )
 
-type Request *http.Request
+//go:generate gotemplate "./gotmpl/xchan" chanstr(string)
+//go:generate gotemplate "./gotmpl/gomap" toreqs(string,MaybeReq)
 
-func GetRequests(urls []string) <-chan Request {
-	out := make(chan Request)
-	go func() {
-		for _, url := range urls {
-			if req, err := DefaultGetRequest(url); err == nil {
-				out <- req
-			}
-		}
-		close(out)
-	}()
-	return out
+type MaybeReq struct {
+	Req *http.Request
+	Err error
 }
 
-func DefaultGetRequest(url string) (Request, error) {
+func ReqChan(urls []string, wrap func(string) MaybeReq) <-chan MaybeReq {
+	return toreqs(1, wrap, chanstr(urls))
+}
+
+func GetRequests(urls []string) <-chan MaybeReq {
+	return ReqChan(urls, DefaultGetRequest)
+}
+
+func DefaultGetRequest(url string) MaybeReq {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, err
+		return MaybeReq{nil, err}
 	}
 	req.Header.Add("Accept-Encoding", "gzip")
-	return Request(req), err
+	return MaybeReq{req, nil}
 }
 
 type HttpData struct {

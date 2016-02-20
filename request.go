@@ -5,63 +5,44 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"sync"
 )
 
-func Do(reqs <-chan Request, n int) <-chan HttpData {
-	return DoWithFilter(reqs, n, PassFilter())
+//go:generate gotemplate "./gotmpl/gomap" doRequest(MaybeReq,HttpData)
+
+func Do(n int, reqs <-chan MaybeReq) <-chan HttpData {
+	return DoWithFilter(n, reqs, PassFilter())
 }
 
-func DoWithFilter(reqs <-chan Request, n int,
+func DoWithFilter(n int, reqs <-chan MaybeReq,
 	filter ResponseFilter) <-chan HttpData {
+	return doRequest(n, HttpRequester(filter), reqs)
+}
 
-	out, n := make(chan HttpData), nGoroutines(n)
-
-	go func() {
-		var wg sync.WaitGroup
-		wg.Add(n)
-		for i := 0; i < n; i++ {
-			go fetchData(reqs, out, &wg, filter)
+func HttpRequester(filter ResponseFilter) func(MaybeReq) HttpData {
+	return func(r MaybeReq) HttpData {
+		req, err := r.Req, r.Err
+		if err != nil {
+			return HttpData{req, nil, nil, err}
 		}
-		wg.Wait()
-		close(out)
-	}()
-	return out
-}
 
-func nGoroutines(n int) int {
-	if n <= 0 {
-		return 1
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return HttpData{req, res, nil, err}
+		}
+		defer res.Body.Close()
+
+		if err := filter(res); err != nil {
+			return HttpData{req, res, nil, err}
+		}
+
+		in, err := decodeBody(res)
+		if err != nil {
+			return HttpData{req, res, nil, err}
+		}
+
+		raw, err := ioutil.ReadAll(in)
+		return HttpData{req, res, raw, err}
 	}
-	return n
-}
-
-func fetchData(reqs <-chan Request, out chan<- HttpData,
-	wg *sync.WaitGroup, filter ResponseFilter) {
-	for req := range reqs {
-		out <- RequestHttpData(req, filter)
-	}
-	wg.Done()
-}
-
-func RequestHttpData(req Request, filter ResponseFilter) HttpData {
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return HttpData{req, res, []byte{}, err}
-	}
-	defer res.Body.Close()
-
-	if err := filter(res); err != nil {
-		return HttpData{req, res, []byte{}, err}
-	}
-
-	in, err := decodeBody(res)
-	if err != nil {
-		return HttpData{req, res, []byte{}, err}
-	}
-
-	raw, err := ioutil.ReadAll(in)
-	return HttpData{req, res, raw, err}
 }
 
 func decodeBody(res *http.Response) (io.Reader, error) {
